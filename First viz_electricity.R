@@ -13,5 +13,7 @@ dat2 %>% ggplot(aes(Time, stromverbrauch_sum, group = Jahr, col = factor(Jahr)))
 
 dat2 %>% ggplot(aes(factor(Monat), stromverbrauch_sum, group = Jahr, col=factor(Jahr)))+
    geom_line()
+
+
 dat2 %>% filter(Jahr == 2021 | Jahr== 2023) %>% ggplot(aes(Time, stromverbrauch_sum, group = Jahr, col = factor(Jahr)))+
    geom_line()
