@@ -8,5 +8,21 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 
+#change your working directory accordingly
+setwd("C:\\Users\\andyf\\OneDrive\\Desktop\\Fürs Studium\\8 Data Analytics\\GitHub\\data_analytics_4_P-B")
+
+library(tidyverse)
+library(openxlsx)
+library(visdat)
+```
+
+```{r Data Cleaning}
+#first row appears to have the same header,but in english, so we skip that
+dat <- read.xlsx("Hybridmobilität n=188.xlsx", startRow = 2 )
+names <- colnames(dat)
+names2 <- str_replace_all(names, pattern = "\\.", replacement = "_")
+
+demographics <- 
+
 ```
 
