@@ -41,6 +41,8 @@ code_df <- code_sheet[,cols_to_take_from_code]
 
 #we then combine the dataset
 full_dat <- cbind(demog_df, code_df)
+
+rm(list = base::setdiff(ls(), "full_dat"))
 ```
 
 ```{r Take the most important question}
