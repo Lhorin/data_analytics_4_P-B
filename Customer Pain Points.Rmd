@@ -8,42 +8,65 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 
-#change your working directory accordingly
-setwd("C:\\Users\\andyf\\OneDrive\\Desktop\\Fürs Studium\\8 Data Analytics\\GitHub\\data_analytics_4_P-B")
-
+# packages we are using right now
 library(tidyverse)
 library(openxlsx)
 library(visdat)
-library(rpart)
+library(randomForest)
+
+# please change your working directory accordingly
+setwd("C:\\Users\\andyf\\OneDrive\\Desktop\\Fürs Studium\\8 Data Analytics\\GitHub\\data_analytics_4_P-B")
+
+
 ```
 
-```{r Data Cleaning}
+```{r Reading in the data}
 #first row appears to have the same header,but in english, so we skip that
+#we read in the demographic data and the metrics sepparately
+
 dat <- read.xlsx("Hybridmobilität n=188.xlsx", startRow = 2 )
+
 code_sheet <- read.xlsx(sheet = 2, "Hybridmobilität n=188.xlsx", startRow = 2)
 
-
+# then we select the demographics of interest and metrics manualy
 demographics <- c(3, 6:7, 11,12, 28:33, 37, 40:47)
 
 cols_to_use <- c(122:356)
 cols_to_remove <-  c( 128,  138,  148,  160, 169,  182,  198,  202,  215,  223,  228,  239,  246,  256,  266,  278,  287,  300,  316,  320,  333,  341,  346)
+
 cols_to_take_from_code <- base::setdiff(cols_to_use, cols_to_remove)
 
 demog_df <- dat[,demographics]
 code_df <- code_sheet[,cols_to_take_from_code]
 
+#we then combine the dataset
 full_dat <- cbind(demog_df, code_df)
 ```
 
 ```{r Take the most important question}
 
+#probably cleaning the column names would make our work easier down the line....
+#
+
+#select one metric column, and try our hands on the random forest
 select_df <- full_dat %>% select(1:20, contains("Tarif"))
-select_df <- select_df %>% mutate(Paint_point = `55.-.immer.zum.günstigsten.Tarif.zu.fahren`- `55.-.immer.zum.günstigsten.Tarif.zu.fahren.1`)
+select_df <- select_df %>% mutate(Pain_point = `55.-.immer.zum.günstigsten.Tarif.zu.fahren`- `55.-.immer.zum.günstigsten.Tarif.zu.fahren.1`)
 
 names <- names(select_df)
 
 select_df
 
-tareef <- rpart(formula = )
+set.seed(42)
+
+#split into training and test set
+select_df$ID <- 1:nrow(select_df)
+
+train_df <- select_df %>% sample_frac(.7)
+test_df <- select_df %>% anti_join(train_df, by = "ID")
+
+#still work in progress
+my_forest <- Pain_point ~ demographics(WIP)
+#trying to do the first regression tree
+tareef <- rpart(formula = my_forest, ntree = 200, )
 ```
 
