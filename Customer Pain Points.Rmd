@@ -48,7 +48,7 @@ rm(list = base::setdiff(ls(), "full_dat"))
 ```{r Take the most important question}
 
 #probably cleaning the column names would make our work easier down the line....
-#
+
 
 #select one metric column, and try our hands on the random forest
 select_df <- full_dat %>% select(1:20, contains("Tarif"))
@@ -62,13 +62,16 @@ set.seed(42)
 
 #split into training and test set
 select_df$ID <- 1:nrow(select_df)
+select_df <- select_df %>% 
+   mutate_if(.predicate = is.character, .funs = factor)
 
-train_df <- select_df %>% sample_frac(.7)
+train_df <- select_df %>% select(-c(21:22,24)) %>% 
+   sample_frac(.7)
 test_df <- select_df %>% anti_join(train_df, by = "ID")
 
 #still work in progress
-my_forest <- Pain_point ~ demographics(WIP)
+my_forest <- "Pain_point ~ ."
 #trying to do the first regression tree
-tareef <- rpart(formula = my_forest, ntree = 200, )
+tareef <- randomForest(formula = my_forest, ntree = 200, data = train_df)
 ```
 
