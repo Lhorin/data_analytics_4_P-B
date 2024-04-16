@@ -14,11 +14,21 @@ library(openxlsx)
 library(visdat)
 library(randomForest)
 
-# please change your working directory accordingly
-setwd("C:\\Users\\andyf\\OneDrive\\Desktop\\Fürs Studium\\8 Data Analytics\\GitHub\\data_analytics_4_P-B")
+```
+
+```{r Reading in the data}
+dat <- read.xlsx("Hybridmobilität systemized.xlsx", sheet = "Labels", startRow = 2)
+
+#we've renamed each variable name to a shorter one, and marked variables which are not necessary with "X_" as a prefix. As such, we can now filter all the variables which has this prefix.
+
+dat <- dat %>% select(-starts_with("X_"))
+
 
 
 ```
+
+
+
 
 ```{r Reading in the data}
 #first row appears to have the same header,but in english, so we skip that
