@@ -12,76 +12,108 @@ knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
 library(openxlsx)
 library(visdat)
-library(randomForest)
+
 
 ```
 
+##Reading in the data
 ```{r Reading in the data}
 dat <- read.xlsx("Hybridmobilität systemized.xlsx", sheet = "Labels", startRow = 2)
+```
 
-#we've renamed each variable name to a shorter one, and marked variables which are not necessary with "X_" as a prefix. As such, we can now filter all the variables which has this prefix.
+We've renamed each variable name to a shorter one, and marked variables which are not necessary with "X_" as a prefix. As such, we can now filter all the variables which has this prefix.
+```{r Filtering out not needed variables}
+dat <- dat %>% 
+   select(-starts_with("X_"))
+```
 
-dat <- dat %>% select(-starts_with("X_"))
+Further, we've named each "importance" metric with "IMP", and each "satisfaction" metric with "SAT". As each metric gets asked twice (one for importance and one for satisfaction), we've labeled them with the same number after the IMP or SAT prefix (e.g. SAT_1 and IMP_1 correspond to the same metric). We can filter for them as well, with their "ID" columns so combining them again. 
+```{r Filter for importance and satisfaction ratings}
+IMP_SAT <- dat %>% select("ID",
+                          starts_with("SAT"),
+                          starts_with("IMP"))
+```
 
+Additionally, we can filter for demographic variables, which are stored in the first 70 columns
+```{r Reading in the data}
 
+demographics <- dat %>% select("iD",
+                               1:70)
+```
+
+Lastly, we can filter for the PR1 data, which might add additional demographic data
+```{r Filter for additional demographics data}
+PR_ratings <- dat %>% select("ID",
+                             starts_with("PR1"))
+```
+## Cleaning the data
+
+Now that we have 3 different datasets, we can start with datacleaning each of these datasets sepparately. We'll start with the importance and satisfaction scores (which we will then use to calculate the "pain" points).  
+
+As values are stored as "[number] = [interpretation]" in these metrics, and we only need the number, we extract the first character in these metrics and turn them into class numeric
+```{r Extract first character from IMP_SAT}
+IMP_SAT <- IMP_SAT %>% 
+   mutate_at(.vars = vars(starts_with("SAT")),
+             .funs = ~str_extract(string= ., pattern = "^.")) %>% 
+   mutate_at(.vars = vars(starts_with("IMP")),
+             .funs = ~str_extract(string= ., pattern = "^.")) %>% 
+   mutate_if(.predicate = is.character,
+             .funs = as.numeric)
+
+IMP_SAT %>% head()
+```
+
+We can now calculate "paint point" scores for each of the 106 metrics, and to make this more efficient, we'll use pivot longer to have 3 columns: the first identifies whether it was a importance or a satisfaction rating, the second which metric number it was (1-106), and the values are the ratings themselves.
+```{r Pivot longer IMP_SAT}
+IMP_SAT_long <- IMP_SAT %>% 
+   pivot_longer(cols = starts_with("IMP")| starts_with("SAT"),
+                names_to = c("IMP/SAT","Metric_Nr"),
+                values_to = "Rating",
+                names_sep = "_")
+IMP_SAT_long %>% head()
+```
+
+We'll have pivot this dataframe to a wider format (so we have IMP and SAT ratings, and metric number is still in a separate column) and calculate the differences for each metric and costumer, which functions as our pain point for each costumer.
+
+```{r Pivot wider IMP_SAT and calculate pain points}
+IMP_SAT_pain_points <- IMP_SAT_long %>% 
+   pivot_wider(names_from = `IMP/SAT`,
+               values_from = Rating) %>% 
+   mutate(Diff = IMP-SAT)
+
+IMP_SAT_pain_points %>% head()
+```
+Lastly, we can pivot this difference columns to a wider format again (so each person who filled out the survey has its own row again).
+```{r}
+Pain_points <- IMP_SAT_pain_points %>% 
+   select(ID, Metric_Nr, Diff) %>% 
+   mutate(Metric_Nr = as.numeric(Metric_Nr)) %>% 
+   arrange(ID, Metric_Nr) %>% 
+   pivot_wider(names_from = Metric_Nr,
+               values_from = `Diff`)
+   
+```
+
+We can now use kmeans clustering to get metric clusters. We will use a for loop to cluster the questions according to 2 to 10 clusters.  We then take the cluster where the F-value (ratio of between sum of squares and within sum of squares) is the largest. **Is this a good approach?** Are there alternatives?
+
+```{r}
+set.seed(42)
+for (i in seq(from = 2, to = 10, by = 1)){
+   k <- i
+   
+   km_fit <- kmeans(Pain_points[,-1], centers = k)
+   
+   N <- nrow(Pain_points)
+   
+   Fstat[i] <- (km_fit$betweenss / (k-1)) / (km_fit$tot.withinss / (N-k))
+}
+
+which(Fstat == max(Fstat))
 
 ```
 
+In this case, the F-value is largest in the second for loop, which means a cluster of 3 different questions are 
 
-
-
-```{r Reading in the data}
-#first row appears to have the same header,but in english, so we skip that
-#we read in the demographic data and the metrics sepparately
-
-dat <- read.xlsx("Hybridmobilität n=188.xlsx", startRow = 2 )
-
-code_sheet <- read.xlsx(sheet = 2, "Hybridmobilität n=188.xlsx", startRow = 2)
-
-# then we select the demographics of interest and metrics manualy
-demographics <- c(3, 6:7, 11,12, 28:33, 37, 40:47)
-
-cols_to_use <- c(122:356)
-cols_to_remove <-  c( 128,  138,  148,  160, 169,  182,  198,  202,  215,  223,  228,  239,  246,  256,  266,  278,  287,  300,  316,  320,  333,  341,  346)
-
-cols_to_take_from_code <- base::setdiff(cols_to_use, cols_to_remove)
-
-demog_df <- dat[,demographics]
-code_df <- code_sheet[,cols_to_take_from_code]
-
-#we then combine the dataset
-full_dat <- cbind(demog_df, code_df)
-
+```{r Cleaning the data}
 rm(list = base::setdiff(ls(), "full_dat"))
 ```
-
-```{r Take the most important question}
-
-#probably cleaning the column names would make our work easier down the line....
-
-
-#select one metric column, and try our hands on the random forest
-select_df <- full_dat %>% select(1:20, contains("Tarif"))
-select_df <- select_df %>% mutate(Pain_point = `55.-.immer.zum.günstigsten.Tarif.zu.fahren`- `55.-.immer.zum.günstigsten.Tarif.zu.fahren.1`)
-
-names <- names(select_df)
-
-select_df
-
-set.seed(42)
-
-#split into training and test set
-select_df$ID <- 1:nrow(select_df)
-select_df <- select_df %>% 
-   mutate_if(.predicate = is.character, .funs = factor)
-
-train_df <- select_df %>% select(-c(21:22,24)) %>% 
-   sample_frac(.7)
-test_df <- select_df %>% anti_join(train_df, by = "ID")
-
-#still work in progress
-my_forest <- "Pain_point ~ ."
-#trying to do the first regression tree
-tareef <- randomForest(formula = my_forest, ntree = 200, data = train_df)
-```
-
