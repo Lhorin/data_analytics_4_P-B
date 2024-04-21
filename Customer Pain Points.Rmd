@@ -216,11 +216,3 @@ which(Fstat == max(Fstat))
 In this case, the F-value is largest in the first for loop, which means a cluster of 2 different questions are 
 
 
-```{r}
-
-```
-
-```{r Cleaning the data}
-
-rm(list = base::setdiff(ls(), "full_dat"))
-```
