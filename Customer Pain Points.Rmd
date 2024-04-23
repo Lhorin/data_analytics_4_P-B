@@ -183,11 +183,48 @@ demographics <- demographics %>%
 #TO DO:
 #
 #neuen_Ort
+demographics$neuen_ort <-  factor(demographics$neuen_ort, levels = c("1 mal im Monat oder seltener",
+                                                                         "2-3 mal im Monat",
+                                                                         "4 mal im Monat oder häufiger",
+                                                                         "Nie",
+                                                                     "neuen_ort")
+                                    )
+
 #privates_auto
+demographics$privates_auto <-  factor(demographics$privates_auto, levels = c("Ja, aber es gehört Bekannten/Freunden oder jemand aus der Familie in einem anderen Haushalt",
+                                                                         "Ja, aber es gehört jemand im selben Haushalt",
+                                                                         "Ja, und es gehört mir selbst",
+                                                                         "Nein, ich habe keinen Zugang zu einem privaten Auto")
+                                    )
+
 #ausflug_oev
+demographics$ausflug_oev <-  factor(demographics$ausflug_oev, levels = c("1 mal in der Woche oder häufiger",
+                                                                         "2-3 mal im Monat",
+                                                                         "Nie",
+                                                                         "Seltener")
+                                    )
+
 #störungen_oev
+demographics$störungen_oev <-  factor(demographics$störungen_oev, levels = c("1-2 mal im letzten Monat",
+                                                                         "3-5 mal im letzten Monat",
+                                                                         "6 mal oder häufiger im letzten Monat",
+                                                                         "Nie")
+                                    )
+
 #störungen_strasse
+demographics$störungen_strasse <-  factor(demographics$störungen_strasse, levels = c("1-2 mal im letzten Monat",
+                                                                         "3-5 mal im letzten Monat",
+                                                                         "6 mal oder häufiger im letzten Monat",
+                                                                         "Nie")
+                                    )
+
 #technologische Entwicklung
+demographics$technologische_entwicklung <-  factor(demographics$technologische_entwicklung, levels = c("Ich bin oft einer/eine der ersten in meinem Umfeld, der/die neue Technologien, Apps oder Gadgets ausprobiert",
+                                                                         "Ich probiere gerne Neues aus, verlasse mich dabei aber auf Produkte von bekannten und etablierten Marken",
+                                                                         "Ich warte meist ab, bis mir andere von ihren Erfahrungen erzählen, bevor ich neue Technologien ausprobiere",
+                                                                         "Technologische Entwicklungen interessieren mich nicht wirklich, ausser sie bieten mir einen konkreten Nutzen im Alltag")
+                                    )
+
 ```
 
 
