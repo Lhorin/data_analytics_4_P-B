@@ -2,11 +2,19 @@
 title: "Customer Pain Points"
 author: "Lukas Lichtner & Andy Cao"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+   html_document:
+      toc: true
+      number_sections: false
+      toc_float: true
+      collapsed: true
+      
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
 
 # packages we are using right now
 library(tidyverse)
@@ -27,21 +35,21 @@ dat <- dat %>%
    select(-starts_with("X_"))
 ```
 
-Further, we've named each "importance" metric with "IMP", and each "satisfaction" metric with "SAT". As each metric gets asked twice (one for importance and one for satisfaction), we've labeled them with the same number after the IMP or SAT prefix (e.g. SAT_1 and IMP_1 correspond to the same metric). We can filter for them as well, with their "ID" columns so combining them again. 
+Further, we've named each "importance" metric with "IMP", and each "satisfaction" metric with "SAT". As each metric gets asked twice (one for importance and one for satisfaction), we've labeled them with the same number after the IMP or SAT prefix (e.g. SAT_1 and IMP_1 correspond to the same metric). We can filter for them as well with their "ID" columns so we can combine them again at a later stage. 
 ```{r Filter for importance and satisfaction ratings}
 IMP_SAT <- dat %>% select("ID",
                           starts_with("SAT"),
                           starts_with("IMP"))
 ```
 
-Additionally, we can filter for demographic variables, which are stored in the first 53 columns
-```{r Reading in the data}
+Additionally, we can filter for demographic variables, which are stored in the first 52 columns.
+```{r Reading in demographics}
 
 demographics <- dat %>% select("ID",
-                               1:53)
+                               1:52)
 ```
 
-Lastly, we can filter for the PR1 data, which might add additional demographic data
+Lastly, we can filter for the Profiling Questions, which might add additional information to the participant.
 ```{r Filter for additional demographics data}
 PR_ratings <- dat %>% select("ID",
                              starts_with("PR1"))
@@ -52,7 +60,7 @@ Now that we have 3 different datasets, we can start with datacleaning each of th
 
 ### Cleaning Importance and Satisfaction Scores
 
-As values are stored as "[number] = [interpretation]" in these metrics, and we only need the number, we extract the first character in these metrics and turn them into class numeric
+As values are stored as "[number] = [interpretation]" in these metrics, and we only need the number, we extract the first character in these metrics and turn them into class numeric.
 ```{r Extract first character from IMP_SAT}
 IMP_SAT <- IMP_SAT %>% 
    mutate_at(.vars = vars(starts_with("SAT")),
@@ -62,7 +70,6 @@ IMP_SAT <- IMP_SAT %>%
    mutate_if(.predicate = is.character,
              .funs = as.numeric)
 
-IMP_SAT %>% head()
 ```
 
 We can now calculate "paint point" scores for each of the 106 metrics, and to make this more efficient, we'll use pivot longer to have 3 columns: the first identifies whether it was a importance or a satisfaction rating, the second which metric number it was (1-106), and the values are the ratings themselves.
@@ -75,7 +82,7 @@ IMP_SAT_long <- IMP_SAT %>%
 IMP_SAT_long %>% head()
 ```
 
-We'll have pivot this dataframe to a wider format (so we have IMP and SAT ratings, and metric number is still in a separate column) and calculate the differences for each metric and costumer, which functions as our pain point for each costumer.
+We'll have to pivot this dataframe to a wider format (so we have IMP and SAT ratings in sepparate columns) and calculate the differences for each metric and costumer, which functions as our pain point for each costumer.
 
 ```{r Pivot wider IMP_SAT and calculate pain points}
 IMP_SAT_pain_points <- IMP_SAT_long %>% 
@@ -85,7 +92,7 @@ IMP_SAT_pain_points <- IMP_SAT_long %>%
 
 IMP_SAT_pain_points %>% head()
 ```
-Lastly, we can pivot this difference columns to a wider format again (so each person who filled out the survey has its own row again).
+Lastly, we can pivot this dataframe to a wider format again (so each person who filled out the survey has its own row again).
 ```{r}
 Pain_points <- IMP_SAT_pain_points %>% 
    select(ID, Metric_Nr, Diff) %>% 
@@ -94,19 +101,20 @@ Pain_points <- IMP_SAT_pain_points %>%
    pivot_wider(names_from = Metric_Nr,
                values_from = `Diff`)
    
+Pain_points[1:10, 1:10]
 ```
 
 
 ### Cleaning Demographics
 
+In this section, we will clean the `demographics`.  
 This is how our current demographic dataframe looks like:
 ```{r Visualize demographic dataset}
 vis_dat(demographics, sort_type = FALSE)
 
 ```
 
-
-First, we create a vector where the column number is stored if the cells contain "Ausgewählt" or "Nicht ausgewählt", as a means to recode them as numeric later on. 
+First, we create a function which can detect dichotomous variables (e.g. cells contain "Ausgewählt" or "Nicht ausgewählt"). We store the column number in a vector as a means to recode them as numeric variables (0 or 1) later on.  
 
 ```{r Create yes_no vector}
 is_yes_no_question <- function(x) {
@@ -136,8 +144,7 @@ demographics <- demographics %>%
              .funs = ~if_else(. == "Ausgewählt", 1, 0))
 ```
 
-
-In this section, we will clean demographic data in our dataset. We'll turn each character variable to a factor first.
+We'll then turn every character column as a factor.
 
 ```{r Create Factors out of character variables}
 demographics <- demographics %>% mutate_if(is.character, factor)
@@ -149,107 +156,236 @@ Then we order the factors according to their proper order if it is ordinal scale
 ```{r Create Ordinal scaled factors if needed}
 #levels: from smallest to biggest
 
-demographics$transportation_pro_woche <-  factor(demographics$transportation_pro_woche, levels = c("Mehrmals in der Woche",
-                                                                                                   "Täglich")
-                                                 )
+demographics$transportation_pro_woche <-
+   factor(demographics$transportation_pro_woche,
+          levels = c("Mehrmals in der Woche",
+                     "Täglich"))
 #still unsure:
 #demographics$prozent_berufstätig <- factor(demographics$prozent_berufstätig)
 
-demographics$nutzung_oev <-  factor(demographics$nutzung_oev, levels = c("Einmal im Monat oder seltener",
-                                                                         "Mehrmals im Monat",
-                                                                         "Einmal in der Woche",
-                                                                         "Mehrmals in der Woche",
-                                                                         "Täglich")
-                                    )
+demographics$nutzung_oev <-
+   factor(
+      demographics$nutzung_oev,
+      levels = c(
+         "Einmal im Monat oder seltener",
+         "Mehrmals im Monat",
+         "Einmal in der Woche",
+         "Mehrmals in der Woche",
+         "Täglich"
+      )
+   )
 
-demographics <- demographics %>% 
+demographics <- demographics %>%
    mutate_at(.vars = vars(starts_with("aw_")),
-             .funs = ~factor(. , levels = c("Nie",
-                                            "Seltener",
-                                            "Mehrmals im Monat",
-                                            "Mehrmals pro Woche",
-                                            "(fast) Täglich"))
-             )
+             .funs = ~ factor(
+                . ,
+                levels = c(
+                   "Nie",
+                   "Seltener",
+                   "Mehrmals im Monat",
+                   "Mehrmals pro Woche",
+                   "(fast) Täglich"
+                )
+             ))
 
-demographics <- demographics %>% 
+demographics <- demographics %>%
    mutate_at(.vars = vars(starts_with("fz_")),
-             .funs = ~factor(. , levels = c("Nie",
-                                            "Seltener",
-                                            "Mehrmals im Monat",
-                                            "Mehrmals pro Woche",
-                                            "(fast) Täglich"))
-             )
+             .funs = ~ factor(
+                . ,
+                levels = c(
+                   "Nie",
+                   "Seltener",
+                   "Mehrmals im Monat",
+                   "Mehrmals pro Woche",
+                   "(fast) Täglich"
+                )
+             ))
 
-#TO DO:
-#
-#neuen_Ort
-demographics$neuen_ort <-  factor(demographics$neuen_ort, levels = c("1 mal im Monat oder seltener",
-                                                                         "2-3 mal im Monat",
-                                                                         "4 mal im Monat oder häufiger",
-                                                                         "Nie",
-                                                                     "neuen_ort")
-                                    )
+demographics$neuen_ort <-
+   factor(
+      demographics$neuen_ort,
+      levels = c(
+         "Nie",
+         "1 mal im Monat oder seltener",
+         "2-3 mal im Monat",
+         "4 mal im Monat oder häufiger"
+      )
+   )
 
-#privates_auto
-demographics$privates_auto <-  factor(demographics$privates_auto, levels = c("Ja, aber es gehört Bekannten/Freunden oder jemand aus der Familie in einem anderen Haushalt",
-                                                                         "Ja, aber es gehört jemand im selben Haushalt",
-                                                                         "Ja, und es gehört mir selbst",
-                                                                         "Nein, ich habe keinen Zugang zu einem privaten Auto")
-                                    )
+demographics$privates_auto <-
+   factor(
+      demographics$privates_auto,
+      levels = c(
+         "Nein, ich habe keinen Zugang zu einem privaten Auto",
+         "Ja, aber es gehört Bekannten/Freunden oder jemand aus der Familie in einem anderen Haushalt",
+         "Ja, aber es gehört jemand im selben Haushalt",
+         "Ja, und es gehört mir selbst"
+      )
+   )
 
-#ausflug_oev
-demographics$ausflug_oev <-  factor(demographics$ausflug_oev, levels = c("1 mal in der Woche oder häufiger",
-                                                                         "2-3 mal im Monat",
-                                                                         "Nie",
-                                                                         "Seltener")
-                                    )
+demographics$ausflug_oev <-
+   factor(
+      demographics$ausflug_oev,
+      levels = c(
+         "Nie",
+         "Seltener",
+         "2-3 mal im Monat",
+         "1 mal in der Woche oder häufiger"
+      )
+   )
 
-#störungen_oev
-demographics$störungen_oev <-  factor(demographics$störungen_oev, levels = c("1-2 mal im letzten Monat",
-                                                                         "3-5 mal im letzten Monat",
-                                                                         "6 mal oder häufiger im letzten Monat",
-                                                                         "Nie")
-                                    )
+demographics$störungen_oev <-
+   factor(
+      demographics$störungen_oev,
+      levels = c(
+         "Nie",
+         "1-2 mal im letzten Monat",
+         "3-5 mal im letzten Monat",
+         "6 mal oder häufiger im letzten Monat"
+      )
+   )
 
-#störungen_strasse
-demographics$störungen_strasse <-  factor(demographics$störungen_strasse, levels = c("1-2 mal im letzten Monat",
-                                                                         "3-5 mal im letzten Monat",
-                                                                         "6 mal oder häufiger im letzten Monat",
-                                                                         "Nie")
-                                    )
+demographics$störungen_strasse <-
+   factor(
+      demographics$störungen_strasse,
+      levels = c(
+         "Nie",
+         "1-2 mal im letzten Monat",
+         "3-5 mal im letzten Monat",
+         "6 mal oder häufiger im letzten Monat"
+      )
+   )
 
-#technologische Entwicklung
-demographics$technologische_entwicklung <-  factor(demographics$technologische_entwicklung, levels = c("Ich bin oft einer/eine der ersten in meinem Umfeld, der/die neue Technologien, Apps oder Gadgets ausprobiert",
-                                                                         "Ich probiere gerne Neues aus, verlasse mich dabei aber auf Produkte von bekannten und etablierten Marken",
-                                                                         "Ich warte meist ab, bis mir andere von ihren Erfahrungen erzählen, bevor ich neue Technologien ausprobiere",
-                                                                         "Technologische Entwicklungen interessieren mich nicht wirklich, ausser sie bieten mir einen konkreten Nutzen im Alltag")
-                                    )
+demographics$technologische_entwicklung <-
+   factor(
+      demographics$technologische_entwicklung,
+      levels = c(
+         "Technologische Entwicklungen interessieren mich nicht wirklich, ausser sie bieten mir einen konkreten Nutzen im Alltag",
+         "Ich warte meist ab, bis mir andere von ihren Erfahrungen erzählen, bevor ich neue Technologien ausprobiere",
+         "Ich probiere gerne Neues aus, verlasse mich dabei aber auf Produkte von bekannten und etablierten Marken",
+         "Ich bin oft einer/eine der ersten in meinem Umfeld, der/die neue Technologien, Apps oder Gadgets ausprobiert"
+      )
+   )
+```
+
+### Cleaning Profiling Questions
+
+The last datacleaning step would be to clean the `PR_ratings` dataset. Luckily, the data are stored as "[number] = [meaning]" again, so we can just extract the first character (in this case always the number) and turn them to a numeric variable again, like we did in the `IMP_SAT` dataset.
+
+```{r Clean PR dataset}
+PR_ratings <- PR_ratings %>%
+   mutate_at(
+      .vars = vars(starts_with("PR")),
+      .funs = ~ str_extract(string = ., pattern = "^.")
+   ) %>%
+   mutate_if(.predicate = is.character,
+             .funs = as.numeric) %>% 
+   mutate(ID = as.numeric(ID))
+
+PR_ratings[1:6,1:6]
+```
+We can then combine the `demographics` dataset with the `PR_ratings` dataset, as both contains useful information from the customer.
+
+```{r Combine demographics datasets}
+demographics_full <- demographics %>% 
+   mutate(ID = as.numeric(ID)) %>% 
+   full_join(PR_ratings, by = "ID")
+```
+
+This is how the dataframe looks like:
+```{r visualize demographics dataset}
+vis_dat(demographics_full, sort_type = F)
+```
+
+As we can see, the factor variables are still not numeric (which we need for the clustering method). As we've ordered them according to their levels in the previous steps, we can now turn them into numeric variables as well.
+
+```{r Turn ordinal factors to numeric and visualize again}
+demographics_full <- demographics_full %>% mutate_if(is.factor, as.numeric)
+
+vis_dat(demographics_full, sort_type = F)
+```
+
+## Analysis
+
+We have to standardize the whole dataframe first (except the ID variables) because the scales were not the same for each variable.
+
+```{r standardize demographics df}
+demog_scaled <- demographics_full %>% 
+   select(-ID) %>% 
+   scale(scale = TRUE)
+```
+
+As we still have some missing values in some cases, we'll try and impute them according to the variables median. **Are there other/ better ways?**
+
+```{r Impute missing values with the mode}
+repl_na_with_median <- function(x){
+   mode_val <- median(x, na.rm = TRUE)
+   x[is.na(x)] <- mode_val
+   return(x)
+}
+
+
+vec_miss <- c()
+for (i in 1:ncol(demog_scaled)){
+   if (sum(is.na(demog_scaled[,i]) > 0)){
+      vec_miss <- c(vec_miss, i)
+   }
+}
+
+demog_scaled_imputed <- demog_scaled %>% 
+   as.data.frame() %>% 
+   mutate_at(.vars = vec_miss, .funs = repl_na_with_median) %>% 
+   as.matrix()
 
 ```
 
 
+Now we can try and cluster the demographics data. We'll try and "find" the best cluster size with a for loop, which then calculates the F-statistic for each cluster. The F-statistic is a ratio of between cluster sum of squares and within cluster sum of squares. In other words, we get a numeric value where we have a good fit between between and within cluster distances. We'll take the cluster number which has the biggest value. **Is this a good approach?**
 
-## Analysis
+```{r cluster with kmeans}
 
-We can now use kmeans clustering to get metric clusters. We will use a for loop to cluster the questions according to 2 to 10 clusters.  We then take the cluster where the F-value (ratio of between sum of squares and within sum of squares) is the largest. **Is this a good approach?** Are there alternatives?
-
-```{r}
 set.seed(42)
 Fstat <- c()
 for (i in seq(from = 2, to = 10, by = 1)){
    k <- i
    
-   km_fit <- kmeans(Pain_points[,-1], centers = k)
+   km_fit <- kmeans(demog_scaled_imputed, centers = k)
    
    N <- nrow(Pain_points)
    
    Fstat[i-1] <- (km_fit$betweenss / (k-1)) / (km_fit$tot.withinss / (N-k))
 }
 
-which(Fstat == max(Fstat))
-
+plot(seq(from = 2, to = 10, by = 1), y = Fstat)
 ```
 
-In this case, the F-value is largest in the first for loop, which means a cluster of 2 different questions are 
+In this case, the F-value is largest with 2 clusters.  
 
+We'll create a new variable `group` with the clusters.
+
+```{r create group variable with clusters}
+km_fit <- kmeans(demog_scaled_imputed, centers = 2)
+
+demographics_full$group <- km_fit$cluster
+```
+
+Let's try and visualize mean Importance and Satisfaction scores according to the two different clusters!
+
+```{r visualize IMP and SAT according to clusters}
+IMP_SAT_pain_points <- demographics_full %>%
+   select(ID, group) %>% 
+   full_join(IMP_SAT_pain_points, by = "ID")
+   
+IMP_SAT_pain_points %>% 
+   group_by(group,Metric_Nr) %>% 
+   summarize(mean_IMP = mean(IMP),
+             mean_SAT = mean(SAT)) %>% 
+   ggplot(aes(mean_IMP, mean_SAT))+
+   geom_label(aes(label = Metric_Nr),
+              label.padding = unit(.05, "lines"),
+              size = 3)+
+   facet_wrap(~group)+
+   theme_bw()
+   
+```
 
