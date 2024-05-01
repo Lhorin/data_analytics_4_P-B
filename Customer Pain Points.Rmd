@@ -20,10 +20,13 @@ knitr::opts_chunk$set(echo = TRUE,
 library(tidyverse)
 library(openxlsx)
 library(visdat)
+library(corrplot)
+library(caret)
 
 
 ```
 
+#Data preparation
 ## Reading in the data
 ```{r Reading in the data}
 dat <- read.xlsx("Hybridmobilität systemized.xlsx", sheet = "Labels", startRow = 2)
@@ -305,8 +308,12 @@ demographics_full <- demographics_full %>% mutate_if(is.factor, as.numeric)
 vis_dat(demographics_full, sort_type = F)
 ```
 
-## Analysis
+# Analysis
+After cleaning the data, we can now start to analyse the data. The analysis is split between two pipelines. In the first section, we tried to cluster our costumers and see whether there are "archetypes" for which we can then base our future implementations.  
 
+In the second section, we tried to predict whether the top pain points can be predicted using only demographic data.
+
+## Segmentation of Customers (First Analysis Pipeline)
 We have to standardize the whole dataframe first (except the ID variables) because the scales were not the same for each variable.
 
 ```{r standardize demographics df}
@@ -331,6 +338,7 @@ for (i in 1:ncol(demog_scaled)){
       vec_miss <- c(vec_miss, i)
    }
 }
+
 
 demog_scaled_imputed <- demog_scaled %>% 
    as.data.frame() %>% 
@@ -388,4 +396,146 @@ IMP_SAT_pain_points %>%
    theme_bw()
    
 ```
+
+## Predicting Pain Point Variability with Demographics
+
+In this section, we try a separate approach in first identifying the top 10 pain points out of the 106 metrics, and then predict with only the demographic data.  
+
+Let us start with picking the top 10 pain points first.  
+
+As the results and interpretation can quite differ for different approaches, we try to first filter for all the metrics which has a mean importance value above 3.5 (still arbitrarily set). In this way, we make sure that the resulting metrics are important to the customers, but are unsatisfied with the current state (thus the pain point is large). Otherwise, we would risk in having metrics coming out on top which are not of concern to the costumers.  
+
+Here are the resulting metrics, sorted my their mean importance
+```{r filter for mean importance above 3.5, and sort it}
+mean_imp <- IMP_SAT_pain_points %>% 
+   group_by(Metric_Nr) %>% 
+   summarize(mean_importance = mean(IMP)) %>% 
+   filter(mean_importance >= 3.5) %>% 
+   arrange(desc(mean_importance))
+
+mean_imp
+```
+
+We can now filter for these specific metrics, and calculate the mean pain point (that is, the mean difference between importance and satisfaction rating) and plot it.
+
+```{r given these metrics, calculate mean pain point and plot}
+metrics_to_take <- mean_imp %>% pull(Metric_Nr) %>% as.numeric()
+
+top_15_Pain_points <- IMP_SAT_pain_points %>% 
+   filter(Metric_Nr %in% metrics_to_take) %>% 
+   group_by(Metric_Nr) %>% 
+   summarize(`Mean Pain Points` = mean(Diff)) %>% 
+   slice_max(order_by = `Mean Pain Points`, n = 15)
+
+top_15_Pain_points$Metric_Nr <- reorder(top_15_Pain_points$Metric_Nr, X = top_15_Pain_points$`Mean Pain Points`)
+
+top_15_Pain_points %>%
+   ggplot(aes(Metric_Nr, y = `Mean Pain Points`))+
+   geom_segment(aes(x = Metric_Nr, xend = Metric_Nr, y = 0, yend = `Mean Pain Points`))+
+   geom_point(color = "#28C2B9", size = 4, alpha = .9)+
+   theme_minimal()+
+   labs(x = "Metric Number", title = "Top 15 Pain Points in Decreasing Order")+
+   coord_flip()+
+   theme(panel.grid.minor.y = element_blank(),
+         panel.grid.major.y = element_blank())+
+   ylim(0,1)
+
+```
+
+According to this plot, the top 6 metrics have higher pain points, whereas the 7th to 11th and 12th to 15th metrics are one step lower. So we will take the top 6 metrics from here on out.  
+Here are the top 6 metrics:  
+
+```{r take top 6 metrics}
+top_6_metrics <- top_15_Pain_points %>% 
+   slice_max(order_by = `Mean Pain Points`, n = 6)
+
+DV_set <- IMP_SAT_pain_points %>% 
+   filter(Metric_Nr %in% top_6_metrics$Metric_Nr)
+
+metric_labels <- read.xlsx("Hybridmobilität systemized.xlsx", sheet =3, startRow =1,colNames = F) %>% 
+   mutate()
+
+colnames(metric_labels) <- c("Metric_Nr", "Label")
+
+DV_set <- DV_set %>% 
+   mutate(Metric_Nr = as.numeric(Metric_Nr)) %>%
+   left_join(metric_labels, by = "Metric_Nr")
+
+unique(DV_set$Label)
+
+```
+
+As we have 82 demographic and profiling variables to choose from for the regularized prediction, it is better to choose the variables a priori before tucking them into the model.  
+
+Though we are not quite sure how biased this approach is, one could view a correlation plot and just select those variables which have higher correlation with others, so we can make sure not to include redundant variables.  
+
+```{r corrplot of profiling questions}
+corrplot(cor(PR_ratings))
+```
+From this plot above, we see that most of the correlations are small or not present. But each profiling question has its subgroup (seen by the smaller squares). We'll choose from each profiling question the ones which has the "biggest" correlations.  
+
+```{r select profiling questions}
+selected_PR <- PR_ratings %>% select(ID, PR12_1, PR12_3, PR13_1, PR13_6, PR14_7, PR15_1)
+```
+
+For the demographics, we'll pick the generic ones (like age, gender, language), and handpick those that seem likely to be predictive of the metrics.  
+
+```{r select demographics}
+selected_demog <- demographics %>% select(ID, sprache, alter, geschlecht, prozent_berufstätig, wohnort, nutzung_oev, sbb_app, google_maps, auto_indiv, neuen_ort, privates_auto, aw_auto, aw_zug, aw_bus, aw_tram, fz_auto, fz_zug, fz_bus, fz_tram, car_sharing, störungen_oev) %>% 
+   mutate(ID = as.numeric(ID))
+
+```
+
+
+
+Let's put everything together! 
+```{r combine datasets and split into test/ train sets}
+prediction_df <- DV_set %>% 
+   select(ID, Diff, Label) %>% 
+   pivot_wider(names_from = Label, values_from = Diff) %>% 
+   full_join(selected_demog, by = "ID") %>% 
+   full_join(selected_PR, by = "ID")
+
+
+
+DV <- prediction_df %>% select(2:7)
+IV <- prediction_df %>% select(8:ncol(prediction_df))
+```
+
+One last check whether the missing data is still present (maybe we had luck and picked variables without missing data):
+```{r visualize IV and missingness}
+vis_dat(IV, sort_type = F)
+```
+
+
+Sadly, the variables of interest have missing values. It seems like there is a pattern though... Let's see whether we can identify why missingness occured in our dataset. Only the questions where the customer gets asked how they commute to work is missing. Maybe it has to do with their current occupation?
+
+```{r}
+prediction_df %>% filter(is.na(aw_zug)) %>% 
+   select(prozent_berufstätig, aw_zug, nutzung_oev)
+```
+It seems like these people are not in the work force right now, and thus have left the questions concerning "Arbeitsweg" unanswered. If I may, I'll impute "Nie" in these variables so we still work with all the customers.
+
+```{r}
+IV[is.na(IV)] <- "Nie"
+vis_dat(IV, sort_type = F)
+```
+
+
+```{r}
+train_ctr <- trainControl(method = "cv", number = 10)
+
+model <-
+   train(
+      x = IV, 
+      y = DV$`so früh wie möglich zu wissen, welche alternative Route man nehmen kann, wenn eine Störung oder Verspätung eintritt`,
+      method = "glmnet",
+      metric = "RMSE",
+      preProcess = c("center", "scale"),
+      trControl = train_ctr
+   )
+print(model)
+```
+
+So we can't predict whether it is a pain point or not.... only 2.7% can be explained.
 
