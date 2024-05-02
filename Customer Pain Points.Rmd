@@ -8,6 +8,7 @@ output:
       number_sections: false
       toc_float: true
       collapsed: true
+      code_fold: show
       
 ---
 
@@ -22,11 +23,13 @@ library(openxlsx)
 library(visdat)
 library(corrplot)
 library(caret)
+library(glmnet)
 
 
 ```
 
-#Data preparation
+# Data preparation  
+
 ## Reading in the data
 ```{r Reading in the data}
 dat <- read.xlsx("Hybridmobilität systemized.xlsx", sheet = "Labels", startRow = 2)
@@ -401,7 +404,7 @@ IMP_SAT_pain_points %>%
 
 In this section, we try a separate approach in first identifying the top 10 pain points out of the 106 metrics, and then predict with only the demographic data.  
 
-Let us start with picking the top 10 pain points first.  
+Let us start with picking the top X pain points first.  
 
 As the results and interpretation can quite differ for different approaches, we try to first filter for all the metrics which has a mean importance value above 3.5 (still arbitrarily set). In this way, we make sure that the resulting metrics are important to the customers, but are unsatisfied with the current state (thus the pain point is large). Otherwise, we would risk in having metrics coming out on top which are not of concern to the costumers.  
 
@@ -443,6 +446,7 @@ top_15_Pain_points %>%
 ```
 
 According to this plot, the top 6 metrics have higher pain points, whereas the 7th to 11th and 12th to 15th metrics are one step lower. So we will take the top 6 metrics from here on out.  
+
 Here are the top 6 metrics:  
 
 ```{r take top 6 metrics}
@@ -472,6 +476,7 @@ Though we are not quite sure how biased this approach is, one could view a corre
 ```{r corrplot of profiling questions}
 corrplot(cor(PR_ratings))
 ```
+
 From this plot above, we see that most of the correlations are small or not present. But each profiling question has its subgroup (seen by the smaller squares). We'll choose from each profiling question the ones which has the "biggest" correlations.  
 
 ```{r select profiling questions}
@@ -485,8 +490,6 @@ selected_demog <- demographics %>% select(ID, sprache, alter, geschlecht, prozen
    mutate(ID = as.numeric(ID))
 
 ```
-
-
 
 Let's put everything together! 
 ```{r combine datasets and split into test/ train sets}
@@ -507,13 +510,13 @@ One last check whether the missing data is still present (maybe we had luck and 
 vis_dat(IV, sort_type = F)
 ```
 
-
 Sadly, the variables of interest have missing values. It seems like there is a pattern though... Let's see whether we can identify why missingness occured in our dataset. Only the questions where the customer gets asked how they commute to work is missing. Maybe it has to do with their current occupation?
 
 ```{r}
 prediction_df %>% filter(is.na(aw_zug)) %>% 
    select(prozent_berufstätig, aw_zug, nutzung_oev)
 ```
+
 It seems like these people are not in the work force right now, and thus have left the questions concerning "Arbeitsweg" unanswered. If I may, I'll impute "Nie" in these variables so we still work with all the customers.
 
 ```{r}
@@ -521,8 +524,10 @@ IV[is.na(IV)] <- "Nie"
 vis_dat(IV, sort_type = F)
 ```
 
+In the last step, we try and predict each dependent variable (in this case the pain points for each customer for the 6 metrics) separately with the selected demographic and profiling data. For this, we'll use regularized regression and try to use 10-fold cross validation so we make sure we get out-of sample performance and see whether our model is generalizable or not.  
 
 ```{r}
+set.seed(42)
 train_ctr <- trainControl(method = "cv", number = 10)
 
 model <-
@@ -534,8 +539,90 @@ model <-
       preProcess = c("center", "scale"),
       trControl = train_ctr
    )
+
 print(model)
 ```
 
-So we can't predict whether it is a pain point or not.... only 2.7% can be explained.
+
+```{r}
+train_ctr <- trainControl(method = "cv", number = 10)
+
+model <-
+   train(
+      x = IV, 
+      y = DV$`so genau wie möglich zu wissen, was los ist, wenn ein Zug nicht mehr fährt`,
+      method = "glmnet",
+      metric = "RMSE",
+      preProcess = c("center", "scale"),
+      trControl = train_ctr
+   )
+
+print(model)
+```
+
+```{r}
+train_ctr <- trainControl(method = "cv", number = 10)
+
+model <-
+   train(
+      x = IV, 
+      y = DV$`so schnell wie möglich das Ausmass einer Störung abschätzen zu können; z.B. fällt nur 1 Tram aus, ist der ganze öV betroffen etc.`,
+      method = "glmnet",
+      metric = "RMSE",
+      preProcess = c("center", "scale"),
+      trControl = train_ctr
+   )
+
+print(model)
+```
+
+```{r}
+train_ctr <- trainControl(method = "cv", number = 10)
+
+model <-
+   train(
+      x = IV, 
+      y = DV$` immer zum günstigsten Tarif zu fahren`,
+      method = "glmnet",
+      metric = "RMSE",
+      preProcess = c("center", "scale"),
+      trControl = train_ctr
+   )
+
+print(model)
+```
+
+```{r}
+train_ctr <- trainControl(method = "cv", number = 10)
+
+model <-
+   train(
+      x = IV, 
+      y = DV$` nie einen falschen Zug zu nehmen`,
+      method = "glmnet",
+      metric = "RMSE",
+      preProcess = c("center", "scale"),
+      trControl = train_ctr
+   )
+
+print(model)
+```
+
+```{r}
+train_ctr <- trainControl(method = "cv", number = 10)
+
+model <-
+   train(
+      x = IV, 
+      y = DV$` so früh wie möglich im Voraus zu wissen, ob man einen Anschlusszug erwischen wird oder nicht, wenn man Verspätung hat`,
+      method = "glmnet",
+      metric = "RMSE",
+      preProcess = c("center", "scale"),
+      trControl = train_ctr
+   )
+
+print(model)
+```
+
+So we can't predict whether it is a pain point or not.... only 2.7% - 10% can be explained.
 
