@@ -436,13 +436,13 @@ top_15_Pain_points <- IMP_SAT_pain_points %>%
    mutate(Metric_Nr = as.numeric(Metric_Nr)) %>% 
    left_join(metric_labels, by = "Metric_Nr", keep = FALSE)
 
-top_15_Pain_points$Label <- str_wrap(top_15_Pain_points$Label, width = 60)
-top_15_Pain_points$Label <- reorder(top_15_Pain_points$Label, X = top_15_Pain_points$`Mean Pain Points`)
+top_15_Pain_points$label <- str_wrap(top_15_Pain_points$Label, width = 60)
+top_15_Pain_points$label <- reorder(top_15_Pain_points$label, X = top_15_Pain_points$`Mean Pain Points`)
 
 
 top_15_Pain_points %>%
-   ggplot(aes(Label, y = `Mean Pain Points`))+
-   geom_segment(aes(x = Label, xend = Label, y = 0, yend = `Mean Pain Points`))+
+   ggplot(aes(label, y = `Mean Pain Points`))+
+   geom_segment(aes(x = label, xend = label, y = 0, yend = `Mean Pain Points`))+
    geom_point(color = "#28C2B9", size = 4, alpha = .9)+
    theme_minimal()+
    labs(x = "Metric Number", title = "Top 15 Pain Points in Decreasing Order")+
@@ -504,9 +504,8 @@ prediction_df <- DV_set %>%
    full_join(selected_demog, by = "ID") %>% 
    full_join(selected_PR, by = "ID")
 
+DV <- prediction_df %>% select(top_15_Pain_points$Label)
 
-
-DV <- prediction_df %>% select(seq(2, length(unique(DV_set$Label))+1))
 IV <- prediction_df %>% select(alter:ncol(prediction_df))
 ```
 
@@ -531,132 +530,139 @@ vis_dat(IV, sort_type = F)
 
 In the last step, we try and predict each dependent variable (in this case the pain points for each customer for the all the metrics) separately with the selected demographic and profiling data. For this, we'll use regularized regression and try to use 10-fold cross validation so we make sure we get out-of sample performance and see whether our model is generalizable or not.  
 
-```{r}
+```{r, warning=FALSE}
+
+res_reg_cv_df <- data.frame()
+
 set.seed(42)
 
 IV_sc <- IV %>% 
    mutate_if(.predicate = is.numeric, .funs = scale)
 
-cv <- cv.glmnet(x =  as.matrix(IV_sc), y = as.matrix(DV)[,1], 
+#start of for loop
+for (i in 1:ncol(DV)) {
+   
+cv <- cv.glmnet(x =  as.matrix(IV_sc), y = as.matrix(DV)[, i], 
                 type.measure = "mse",
                 nfolds = 10)
 
+#take the best lambda, and fit a regularized regression
 best_lambda <- cv$lambda.min
 
 fin_model <- glmnet(
    x = IV_sc,
-   y = as.matrix(DV)[,1],
+   y = as.matrix(DV)[, i],
    alpha = 1,
    lambda = best_lambda
 )
 
-coefficients <- coef(fin_model)
+#calculate rsq values
+rsq_mean <- cv$glmnet.fit$dev.ratio %>% mean()
+rsq_max <- cv$glmnet.fit$dev.ratio %>% max()
+rsq_sd <- cv$glmnet.fit$dev.ratio %>% sd()
 
-print(coefficients)
-coefficients[2,]
+#sort coefficients by value
+coefficients <- coef(fin_model)[, 1] %>% round(digits = 3) %>% abs() %>% sort(decreasing = TRUE)
 
-coefficients[,1]
+#remove the intercept if it is on the list of top 3
+pos_intercept <- which(names(coefficients) == "(Intercept)")
+coefficients <- coefficients[-c(pos_intercept)]
+
+relevant_coeff <- coefficients %>% head(3) %>% names()
+coeff_val <-  coefficients %>% head(3)
+
+summary_cv <- matrix(
+   data = c(names(DV[, i]),
+           best_lambda,
+           rsq_mean,
+           rsq_max,
+           rsq_sd,
+           relevant_coeff,
+           coeff_val),
+   byrow = TRUE,
+   ncol = 11) %>% 
+   as.data.frame()
+
+res_reg_cv_df <- rbind(res_reg_cv_df, summary_cv)
+}
+
+names(res_reg_cv_df) <- c("Question",
+                          "best_lambda",
+                          "rsq_mean",
+                          "rsq_max",
+                          "rsq_sd",
+                          paste0("relevant_coeff_", 1:3),
+                          paste0("coeff_val_", 1:3)
+)
 
 
-train_ctr <- trainControl(method = "cv", number = 10)
-model <-
-   train(
-      x = IV, 
-      y = DV$`so früh wie möglich zu wissen, welche alternative Route man nehmen kann, wenn eine Störung oder Verspätung eintritt`,
-      method = "glmnet",
-      metric = "RMSE",
-      preProcess = c("center", "scale"),
-      trControl = train_ctr
-   )
 
-print(model)
 
-model$results$Rsquared
-fin_model <- model$finalModel
-coefficient <- coef(fin_model)
-print(coefficient)
+# 
+# train_ctr <- trainControl(method = "cv", number = 10)
+# model <-
+#    train(
+#       x = IV, 
+#       y = DV$`so früh wie möglich zu wissen, welche alternative Route man nehmen kann, wenn eine Störung oder Verspätung eintritt`,
+#       method = "glmnet",
+#       metric = "RMSE",
+#       preProcess = c("center", "scale"),
+#       trControl = train_ctr
+#    )
+# 
+# print(model)
+# 
+# model$results$Rsquared
+# fin_model <- model$finalModel
+# coefficient <- coef(fin_model)
+# print(coefficient)
 ```
 
 
+We can now clean up our resulting dataframe, where we have the relevant out of sample metrics, as well as the weights of the top 3 variables for each of our pain points.
 ```{r}
-train_ctr <- trainControl(method = "cv", number = 10)
+res_reg_cv_df$Label <- str_wrap(res_reg_cv_df$Question, width = 40)
+res_reg_cv_df$Label <- reorder(res_reg_cv_df$Label, top_15_Pain_points$`Mean Pain Points`)
 
-model <-
-   train(
-      x = IV, 
-      y = DV$`so genau wie möglich zu wissen, was los ist, wenn ein Zug nicht mehr fährt`,
-      method = "glmnet",
-      metric = "RMSE",
-      preProcess = c("center", "scale"),
-      trControl = train_ctr
-   )
 
-print(model)
+res_reg_cv_df <- res_reg_cv_df %>% 
+   mutate_at(.vars = vars(contains("lambda") | contains("rsq") | contains("val")),
+             .funs = as.numeric)
+
+res_reg_cv_df %>% 
+   ggplot(aes(Label, rsq_mean)) +
+   geom_col()+
+   coord_flip()+
+   #geom_point(aes(Label, rsq_max))+
+   labs(title = "Out of sample explained variance in order of pain points")
 ```
 
+Which of the variables had higher importance in predicting the pain points?
 ```{r}
-train_ctr <- trainControl(method = "cv", number = 10)
 
-model <-
-   train(
-      x = IV, 
-      y = DV$`so schnell wie möglich das Ausmass einer Störung abschätzen zu können; z.B. fällt nur 1 Tram aus, ist der ganze öV betroffen etc.`,
-      method = "glmnet",
-      metric = "RMSE",
-      preProcess = c("center", "scale"),
-      trControl = train_ctr
-   )
+coeff_val_df <- res_reg_cv_df %>% 
+   select(Question, starts_with("coeff")) %>% 
+   pivot_longer(cols = starts_with("coeff"),
+                names_prefix = "coeff_val_",
+               names_to = "coeff_Nr",
+               values_to = "coeff_val"
+                  )
 
-print(model)
+coeff_label_df <- res_reg_cv_df %>% 
+   select(Question, starts_with("relevant")) %>% 
+   pivot_longer(cols = starts_with("relevant"),
+                names_prefix = "relevant_coeff_",
+                names_to = "coeff_Nr",
+                values_to = "variable")
+
+coeff_df <- coeff_val_df %>% 
+   full_join(coeff_label_df, by = c("Question", "coeff_Nr"))
+
+coeff_df_filtered <- coeff_df %>% filter(coeff_val >=.1)
+
 ```
 
-```{r}
-train_ctr <- trainControl(method = "cv", number = 10)
 
-model <-
-   train(
-      x = IV, 
-      y = DV$` immer zum günstigsten Tarif zu fahren`,
-      method = "glmnet",
-      metric = "RMSE",
-      preProcess = c("center", "scale"),
-      trControl = train_ctr
-   )
-
-print(model)
-```
-
-```{r}
-train_ctr <- trainControl(method = "cv", number = 10)
-
-model <-
-   train(
-      x = IV, 
-      y = DV$` nie einen falschen Zug zu nehmen`,
-      method = "glmnet",
-      metric = "RMSE",
-      preProcess = c("center", "scale"),
-      trControl = train_ctr
-   )
-
-print(model)
-```
-
-```{r}
-train_ctr <- trainControl(method = "cv", number = 10)
-
-model <-
-   train(
-      x = IV, 
-      y = DV$` so früh wie möglich im Voraus zu wissen, ob man einen Anschlusszug erwischen wird oder nicht, wenn man Verspätung hat`,
-      method = "glmnet",
-      metric = "RMSE",
-      preProcess = c("center", "scale"),
-      trControl = train_ctr
-   )
-
-print(model)
-```
 
 So we can't predict whether it is a pain point or not.... only 2.7% - 10% can be explained.
 
