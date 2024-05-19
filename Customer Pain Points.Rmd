@@ -496,7 +496,7 @@ names(selected_PR)
 For the demographics, we'll pick the generic ones (like age, gender), and handpick those that seem likely to be predictive of the metrics.  
 
 ```{r select demographics}
-selected_demog <- demographics %>% select(ID, Alter, Geschlecht, Wohnort, nutzung_oev, SBB.App, Google.Maps, neuen_ort, aw_zug, aw_tram, fz_zug) %>% 
+selected_demog <- demographics %>% select(ID, Alter, Geschlecht, Wohnort, nutzung_oev, SBB_App, Google_Maps, neuen_ort, aw_zug, aw_tram, fz_zug) %>% 
    mutate(ID = as.numeric(ID))
 
 ```
@@ -641,7 +641,7 @@ res_reg_cv_df %>%
    labs(y = TeX("Mean\\ $R^2$"),
         x = "Pain Point")+
    geom_errorbar(aes(ymin = rsq_mean- rsq_sd, ymax = rsq_mean + rsq_sd), width = .2)+
-   theme_bw()+
+   theme_minimal()+
    theme(axis.text.y = element_text(size = 15),
          axis.text.x = element_text(size = 14),
          axis.title.y = element_text(size = 18),
@@ -696,7 +696,7 @@ df_for_lollipop <- top_15_Pain_points %>%
    left_join(labels_for_lollipop, by = c("Label" = "Question")) %>% 
    mutate(coeff2 = ifelse(is.na(coeff), " ",
                           str_wrap(
-                             str_replace(coeff, pattern = "\\.", replacement = " "),
+                             str_replace_all(coeff, pattern = "_", replacement = " "),
                                 width = 50
                              )
                           ))
