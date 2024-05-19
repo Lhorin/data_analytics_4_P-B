@@ -15,7 +15,10 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,
                       warning = FALSE,
-                      message = FALSE)
+                      message = FALSE,
+                      fig.width = 17,
+                      fig.height = 10,
+                      dpi = 300)
 
 # packages we are using right now
 library(tidyverse)
@@ -23,6 +26,7 @@ library(openxlsx)
 library(visdat)
 library(corrplot)
 library(glmnet)
+library(latex2exp)
 
 
 ```
@@ -448,7 +452,8 @@ top_15_Pain_points %>%
    labs(x = "Metric Number", title = "Top 15 Pain Points in Decreasing Order")+
    coord_flip()+
    theme(panel.grid.minor.y = element_blank(),
-         panel.grid.major.y = element_blank())+
+         panel.grid.major.y = element_blank(),
+         axis.text.y = element_text(size = 12))+
    ylim(0,1)
 
 ```
@@ -481,7 +486,7 @@ From this plot above, we see that most of the correlations are in the profiling 
 ```{r select profiling questions}
 selected_PR <- PR_ratings %>% select(ID, PR12_3, PR13_1, PR13_6, PR14_7, PR15_1)
 
-PR_name <- read.xlsx("Hybridmobilität systemized.xlsx", sheet = 2, startRow =1,colNames = T) %>% 
+PR_name <- read.xlsx("Hybridmobilität systemized.xlsx", sheet = 2, startRow =1 ,colNames = T) %>% 
    select(names(selected_PR))
 
 names(selected_PR) <- PR_name[1,]
@@ -491,7 +496,7 @@ names(selected_PR)
 For the demographics, we'll pick the generic ones (like age, gender), and handpick those that seem likely to be predictive of the metrics.  
 
 ```{r select demographics}
-selected_demog <- demographics %>% select(ID, alter, geschlecht, prozent_berufstätig, wohnort, nutzung_oev, sbb_app, google_maps, neuen_ort,  aw_zug, aw_tram, fz_zug, störungen_oev) %>% 
+selected_demog <- demographics %>% select(ID, Alter, Geschlecht, Wohnort, nutzung_oev, SBB.App, Google.Maps, neuen_ort, aw_zug, aw_tram, fz_zug) %>% 
    mutate(ID = as.numeric(ID))
 
 ```
@@ -506,7 +511,7 @@ prediction_df <- DV_set %>%
 
 DV <- prediction_df %>% select(top_15_Pain_points$Label)
 
-IV <- prediction_df %>% select(alter:ncol(prediction_df))
+IV <- prediction_df %>% select(Alter:ncol(prediction_df))
 ```
 
 One last check whether the missing data is still present (maybe we had luck and picked variables without missing data):
@@ -517,7 +522,7 @@ vis_dat(IV, sort_type = F)
 Sadly, the variables of interest have missing values. It seems like there is a pattern though... Let's see whether we can identify why missingness occured in our dataset. Only the questions where the customer gets asked how they commute to work is missing. Maybe it has to do with their current occupation?
 
 ```{r}
-prediction_df %>% filter(is.na(aw_zug)) %>% 
+demographics %>% filter(is.na(aw_zug)) %>% 
    select(prozent_berufstätig, aw_zug, nutzung_oev)
 ```
 
@@ -620,8 +625,8 @@ names(res_reg_cv_df) <- c("Question",
 
 
 We can now clean up our resulting dataframe, where we have the relevant out of sample metrics, as well as the weights of the top 3 variables for each of our pain points.
-```{r}
-res_reg_cv_df$Label <- str_wrap(res_reg_cv_df$Question, width = 40)
+```{r, dpi = 500}
+res_reg_cv_df$Label <- str_wrap(res_reg_cv_df$Question, width = 60)
 res_reg_cv_df$Label <- reorder(res_reg_cv_df$Label, top_15_Pain_points$`Mean Pain Points`)
 
 
@@ -633,8 +638,15 @@ res_reg_cv_df %>%
    ggplot(aes(Label, rsq_mean)) +
    geom_col()+
    coord_flip()+
-   #geom_point(aes(Label, rsq_max))+
-   labs(title = "Out of sample explained variance in order of pain points")
+   labs(y = TeX("Mean\\ $R^2$"),
+        x = "Pain Point")+
+   geom_errorbar(aes(ymin = rsq_mean- rsq_sd, ymax = rsq_mean + rsq_sd), width = .2)+
+   theme_bw()+
+   theme(axis.text.y = element_text(size = 15),
+         axis.text.x = element_text(size = 14),
+         axis.title.y = element_text(size = 18),
+         axis.title.x = element_text(size = 18))+
+   scale_y_continuous(breaks = seq(0, 0.15, by = 0.02), limits = c(0, 0.15))
 ```
 
 Which of the variables had higher importance in predicting the pain points?
@@ -658,11 +670,55 @@ coeff_label_df <- res_reg_cv_df %>%
 coeff_df <- coeff_val_df %>% 
    full_join(coeff_label_df, by = c("Question", "coeff_Nr"))
 
-coeff_df_filtered <- coeff_df %>% filter(coeff_val >=.1)
+coeff_df_filtered <- coeff_df %>% filter(coeff_val >=.1) %>% 
+   mutate(
+      variable2 = case_when(
+         variable == "Für mich ist es schwer, die Wege in meinem Alltag mit öffentlichen Verkehrsmitteln anstatt mit dem Auto zurückzulegen."  ~ "Schwierigkeiten ÖV statt Auto zu benutzen",
+         variable == "Mein fahrerisches Geschick beim Autofahren anwenden zu können, macht mir Spass." ~ "Spass am Autofahren",
+         .default = variable
+      )
+   )
 
 ```
 
 
 
 So we can't predict whether it is a pain point or not.... only 2.7% - 10% can be explained.
+
+Here is our final plot:
+
+```{r, dpi= 500}
+labels_for_lollipop <-  coeff_df_filtered %>% 
+   group_by(Question) %>% 
+   summarize(coeff = paste(variable2, collapse = ", "))
+
+df_for_lollipop <- top_15_Pain_points %>%
+   left_join(labels_for_lollipop, by = c("Label" = "Question")) %>% 
+   mutate(coeff2 = ifelse(is.na(coeff), " ",
+                          str_wrap(
+                             str_replace(coeff, pattern = "\\.", replacement = " "),
+                                width = 50
+                             )
+                          ))
+
+
+
+df_for_lollipop %>% 
+   ggplot(aes(x = label, y = `Mean Pain Points`))+
+   geom_segment(aes(x = label, xend = label, y = 0, yend = `Mean Pain Points`))+
+   geom_point(color = "#28C2B9", size = 4, alpha = .9)+
+   theme_minimal()+
+   labs(x = "Pain Point")+
+   coord_flip()+
+   theme(panel.grid.minor.y = element_blank(),
+         panel.grid.major.y = element_blank(),
+         axis.text.y = element_text(size = 15),
+         axis.text.x = element_text(size = 14),
+         axis.title.x = element_text(size = 18),
+         axis.title.y = element_text(size = 18))+
+   scale_y_continuous(breaks = seq(0, 1.3, by = .2), limits = c(0,1.3))+
+   #ylim(c(0,1.3))+
+   geom_text(aes(y = `Mean Pain Points`, label = coeff2), hjust = 0, nudge_y = .1, size = 5)
+
+```
 
