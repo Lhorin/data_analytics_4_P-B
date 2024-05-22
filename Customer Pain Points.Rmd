@@ -436,7 +436,7 @@ top_15_Pain_points <- IMP_SAT_pain_points %>%
    filter(Metric_Nr %in% metrics_to_take) %>% 
    group_by(Metric_Nr) %>% 
    summarize(`Mean Pain Points` = mean(Diff)) %>% 
-   slice_max(order_by = `Mean Pain Points`, n = 5) %>% 
+   slice_max(order_by = `Mean Pain Points`, n = 15) %>% 
    mutate(Metric_Nr = as.numeric(Metric_Nr)) %>% 
    left_join(metric_labels, by = "Metric_Nr", keep = FALSE)
 
@@ -458,9 +458,11 @@ top_15_Pain_points %>%
 
 ```
 
-According to this plot, the top 6 metrics have higher pain points, whereas the 7th to 11th and 12th to 15th metrics are one step lower.
+According to this plot, the top 6 metrics have higher pain points, whereas the 7th to 11th and 12th to 15th metrics are one step lower. For simplicity and visibility reason, we are only taking the top 5 Pain points in the analysis, so the labels can be read even from farther away.
 
 ```{r}
+top_15_Pain_points <- top_15_Pain_points %>% slice_max(order_by = `Mean Pain Points`, n = 5)
+
 DV_set <- IMP_SAT_pain_points %>% 
    filter(Metric_Nr %in% top_15_Pain_points$Metric_Nr)%>% 
    mutate(Metric_Nr = as.numeric(Metric_Nr)) %>%
@@ -601,26 +603,6 @@ names(res_reg_cv_df) <- c("Question",
 )
 
 
-
-
-# 
-# train_ctr <- trainControl(method = "cv", number = 10)
-# model <-
-#    train(
-#       x = IV, 
-#       y = DV$`so früh wie möglich zu wissen, welche alternative Route man nehmen kann, wenn eine Störung oder Verspätung eintritt`,
-#       method = "glmnet",
-#       metric = "RMSE",
-#       preProcess = c("center", "scale"),
-#       trControl = train_ctr
-#    )
-# 
-# print(model)
-# 
-# model$results$Rsquared
-# fin_model <- model$finalModel
-# coefficient <- coef(fin_model)
-# print(coefficient)
 ```
 
 
@@ -700,7 +682,6 @@ df_for_lollipop <- top_15_Pain_points %>%
                                 width = 10
                              )
                           ))
-
 
 
 df_for_lollipop %>% 
