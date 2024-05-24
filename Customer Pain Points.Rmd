@@ -683,10 +683,28 @@ df_for_lollipop <- top_15_Pain_points %>%
                              )
                           ))
 
+IMP_SAT_mean <- IMP_SAT_pain_points %>% 
+                group_by(Metric_Nr) %>% 
+                summarize(mean_imp = mean(IMP),
+                          mean_sat = mean(SAT)) %>% 
+   mutate(Metric_Nr = as.integer(Metric_Nr))
+      
+
+df_for_lollipop <- df_for_lollipop %>% 
+   left_join(IMP_SAT_mean, by = "Metric_Nr") %>% 
+   mutate(label_short = case_when(Metric_Nr == 104 ~ "know you can reach a connecting train",
+                                  Metric_Nr == 55 ~ "travel at the cheapest rate",
+                                  Metric_Nr == 102 ~ "know why the train stopped",
+                                  Metric_Nr == 99 ~ "know alternative routes in case of delay", 
+                                  Metric_Nr == 81 ~ "never take the wrong train"))
+
+df_for_lollipop$label_short <-  reorder(df_for_lollipop$label_short, X = df_for_lollipop$`Mean Pain Points`, decreasing = F)
+
+
 
 df_for_lollipop %>% 
-   ggplot(aes(x = label, y = `Mean Pain Points`))+
-   geom_segment(aes(x = label, xend = label, y = 0, yend = `Mean Pain Points`), linewidth = 3,alpha = .7)+
+   ggplot(aes(x = label_short, y = `Mean Pain Points`))+
+   geom_segment(aes(x = label_short, xend = label_short, y = 0, yend = `Mean Pain Points`), linewidth = 3,alpha = .7)+
    geom_point(color = "#28C2B9", size = 9, alpha = .9)+
    theme_minimal()+
    labs(x = "Pain Point")+
@@ -697,9 +715,27 @@ df_for_lollipop %>%
          axis.text.x = element_text(size = 20),
          axis.title.x = element_text(size = 18),
          axis.title.y = element_text(size = 18))+
-   scale_y_continuous(breaks = seq(0, 1.3, by = .2), limits = c(0,1.3))+
+   scale_y_continuous(breaks = seq(0, 1.3, by = .2), limits = c(0,1.3))
    #ylim(c(0,1.3))+
-   geom_text(aes(y = `Mean Pain Points`, label = coeff2), hjust = 0, nudge_y = .1, size = 10)
+   #geom_text(aes(y = `Mean Pain Points`, label = coeff2), hjust = 0, nudge_y = .1, size = 10)
+   #
 
+my_plot <- df_for_lollipop %>% 
+   ggplot(aes(x = label_short, y = mean_imp))+
+   geom_segment(aes(x = label_short, xend = label_short, y = mean_sat, yend = mean_imp), linewidth = 2,alpha = .7, col = "red")+
+      geom_point(size = 11, shape = 18)+
+   geom_point(aes(x = label_short, y = mean_sat), size = 8, shape = 19)+
+   coord_flip()+
+   theme_minimal()+
+   theme(panel.grid.minor.y = element_blank(),
+         panel.grid.major.y = element_blank(),
+         axis.text.y = element_text(size = 23),
+         axis.text.x = element_text(size = 20),
+         axis.title.x = element_text(size = 18),
+         axis.title.y = element_blank())+
+   scale_y_continuous(breaks = seq(1, 5, by = 1), limits = c(1,5))+
+   labs(y = "Ratings", x = "Need")
+
+ggsave("my_plot.jpeg", my_plot, device = "jpeg", bg = "transparent", width = 7, height = 4)
 ```
 
