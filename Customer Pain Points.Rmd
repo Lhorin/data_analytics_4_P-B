@@ -1,7 +1,7 @@
 ---
 title: "Customer Pain Points"
 author: "Lukas Lichtner & Andy Cao"
-date: "`r Sys.Date()`"
+date: "24-05-2024"
 output: 
    html_document:
       toc: true
